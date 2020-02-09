@@ -27,6 +27,14 @@ public class Chapter01 {
         List<Map<String,String>> articles = getArticles(conn, 1);
         printArticles(articles);
         System.out.println("==========按文章得分排序 END=========");
+
+        addGroups(conn, articleId, new String[]{"new-group"} );
+
+        System.out.println("=============和该文章同组的文章有: start============");
+        articles = getGroupArticles(conn, "new-group", 1);
+        printArticles(articles);
+        System.out.println("=============同组的文章 end============");
+
     }
 
     /**
@@ -85,7 +93,7 @@ public class Chapter01 {
         return getArticles(conn, page, "score:");
     }
 
-    private List<Map<String, String>> getArticles(Jedis conn, int page, String order) {
+    public List<Map<String, String>> getArticles(Jedis conn, int page, String order) {
         int start = (page - 1) * ARTICLES_PRE_PAGE;
         int end = start + ARTICLES_PRE_PAGE - 1;
 
@@ -99,8 +107,35 @@ public class Chapter01 {
         return articles;
     }
 
+    /**
+     * 文章分组
+     * @param conn
+     * @param articleId
+     * @param toAdd
+     */
+   public void addGroups(Jedis conn, String articleId, String[] toAdd){
+        String article = "article:" + articleId;
+        for (String group : toAdd){
+            conn.sadd("group:" + group, article);
+        }
+   }
+
+   public List<Map<String, String>> getGroupArticles(Jedis conn, String group, int page){
+       return getGroupArticles(conn, group, page, "score:");
+   }
+
+    public List<Map<String, String>> getGroupArticles(Jedis conn, String group, int page, String order){
+       String key = order + group;//创建一个建来保存本次排序
+       if (!conn.exists(key)){
+           ZParams params = new ZParams().aggregate(ZParams.Aggregate.MAX);
+           conn.zinterstore(key, params, "group:" + group, order);
+           conn.expire(key, 60);//60秒后删除该有序集合
+       }
+       return getArticles(conn, page, key);
+    }
+
     //打印文章信息
-    private void printArticles(List<Map<String,String>> articles){
+    public void printArticles(List<Map<String,String>> articles){
         for (Map<String,String> article : articles){
             System.out.println("  id: " + article.get("id"));
             for (Map.Entry<String,String> entry : article.entrySet()){
